@@ -17,7 +17,8 @@ class States(StatesGroup):
     choice = State()
 
 
-bot = Bot("359826646:AAEGqZFk0Mlj1Yi0QS0QhkDbgHJQUUiBnn4")
+with open("TOKEN", "r") as f:
+    bot = Bot(f.read().strip())
 dp = Dispatcher(bot, storage=MemoryStorage())
 
 
