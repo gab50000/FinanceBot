@@ -1,70 +1,51 @@
 from enum import IntEnum
 import logging
 
-from telegram import ReplyKeyboardMarkup
-from telegram.ext import (
-    Updater,
-    CommandHandler,
-    MessageHandler,
-    ConversationHandler,
-    Filters,
-)
-
+from aiogram import Bot, Dispatcher, types
+from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.utils import executor
 
 logger = logging.getLogger("moneybot")
 
 
-class States(IntEnum):
-    Choices = 0
-    NewPurchase = 1
-    CancelPurchase = 2
-    NewPayment = 3
-    CancelPayment = 4
-    BackToStart = 5
+class States(StatesGroup):
+    purchase = State()
+    payment = State()
+    payment_amount = State()
+    choice = State()
 
 
-ACTIONS = ["Purchase", "Payment"]
+bot = Bot("359826646:AAEGqZFk0Mlj1Yi0QS0QhkDbgHJQUUiBnn4")
+dp = Dispatcher(bot, storage=MemoryStorage())
 
 
-def start(update, context):
-    reply_keyboard = [ACTIONS]
-    update.message.reply_text(
-        "What do you want to do?",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False),
-    )
-    return States.Choices
+@dp.message_handler(commands="start")
+async def start(message):
+    await States.choice.set()
+    await message.reply("What do you want to do?")
 
 
-def do_something(update, context):
-    update.message.reply_text("Cool")
-    return States.BackToStart
+@dp.message_handler(
+    lambda message: "purchase" in message.text.lower(), state=States.choice
+)
+async def purchase(message):
+    await message.reply("Purchase")
 
 
-def fallback(update, context):
-    update.message.reply_text("I did not understand")
-    return States.BackToStart
+@dp.message_handler(
+    lambda message: "payment" in message.text.lower(), state=States.choice
+)
+async def payment(message):
+    await States.payment_amount.set()
+    await message.reply("How much do you want to pay?")
 
 
-def main():
-    logging.basicConfig(level=logging.DEBUG)
-    updater = Updater("359826646:AAEGqZFk0Mlj1Yi0QS0QhkDbgHJQUUiBnn4", use_context=True)
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={
-            States.Choices: [
-                MessageHandler(Filters.text("Purchase"), do_something),
-                MessageHandler(Filters.text("Payment"), do_something),
-            ],
-            States.NewPurchase: [MessageHandler(Filters.regex(r"\d+"), do_something)],
-            States.BackToStart: [MessageHandler(Filters.text, start)],
-        },
-        fallbacks=[fallback],
-    )
-    updater.dispatcher.add_handler(conv_handler)
-    updater.start_polling()
-    updater.idle()
+@dp.message_handler(regexp=r"\d+(\.\d{2})?", state=States.payment_amount)
+async def payment_amount(message):
+    await message.reply(f"You want to pay {message.text}")
 
 
 if __name__ == "__main__":
-    main()
+    logging.basicConfig(level=logging.DEBUG)
+    executor.start_polling(dp, skip_updates=True)
