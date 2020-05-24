@@ -1,8 +1,9 @@
+from datetime import datetime
 from enum import IntEnum
 import logging
-from datetime import datetime
+import re
 
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher, types, filters
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.contrib.fsm_storage.files import MemoryStorage
 from aiogram.utils import executor
@@ -18,12 +19,15 @@ class States(StatesGroup):
     purchase_choice = State()
     purchase = State()
     purchase_list = State()
+    awaiting_purchases = State()
 
     payment_choice = State()
     payment = State()
     payment_amount = State()
     payment_list = State()
 
+
+purchase_format = r"(\w+)\s+(\d+(?:\.\d{2})?)\s*€?"
 
 with open("TOKEN", "r") as f:
     bot = Bot(f.read().strip())
@@ -46,11 +50,35 @@ async def start(message):
     await message.reply("What do you want to do?", reply_markup=markup)
 
 
-@dp.message_handler(
-    lambda message: "purchase" in message.text.lower(), state=States.choice
-)
+@dp.message_handler(text="Purchase", state=States.choice)
 async def purchase(message):
-    await message.reply("Purchase")
+    markup = types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    markup.add("List purchases", "New purchase(s)")
+
+    await States.purchase_choice.set()
+    await message.reply("What exactly do you want to do?", reply_markup=markup)
+
+
+@dp.message_handler(text="List purchases", state=States.purchase_choice)
+async def list_payments(message, state):
+    history = "\n".join(database.payments)
+    await message.reply(f"Showing you the last purchases made:\n{history}")
+    await state.finish()
+
+
+@dp.message_handler(text="New purchase(s)", state=States.purchase_choice)
+async def awaiting_new_purchases(message, state):
+    await States.awaiting_purchases.set()
+    await message.reply("What did you purchase? (Type ")
+
+
+@dp.message_handler(
+    regexp=purchase_format, state=States.awaiting_purchases,
+)
+async def new_purchase(message):
+    matches = re.findall(purchase_format, message.text)
+    for product, price in matches:
+        await message.reply(f"Ah, you bought {product} for {price} €.")
 
 
 @dp.message_handler(text="Payment", state=States.choice)
